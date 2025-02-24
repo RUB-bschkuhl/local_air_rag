@@ -1,5 +1,6 @@
 https://apidog.com/blog/rag-deepseek-r1-ollama/
 
-pip install streamlit langchain langchain-community langchain-experimental ollama pdfplumber faiss-cpu sentence-transformers
-
+python3 -m venv myenv
+source myenv/bin/activate
+pip install -r requirements.txt
 streamlit run app.py

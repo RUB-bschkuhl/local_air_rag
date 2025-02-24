@@ -116,3 +116,5 @@ ehthumbs.db
 # Temporary files
 *.swp
 *~
+
+myenv/
