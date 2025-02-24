@@ -1,5 +1,5 @@
 from langchain_core.globals import set_verbose, set_debug
-from langchain_community.vectorstores import Chroma
+from langchain_community.vectorstores import FAISS
 from langchain_community.chat_models import ChatOllama
 from langchain_community.embeddings import FastEmbedEmbeddings
 from langchain.schema.output_parser import StrOutputParser
@@ -14,7 +14,6 @@ from langchain import hub
 set_debug(True)
 set_verbose(True)
 
-
 class ChatPDF:
     vector_store = None
     retriever = None
@@ -26,7 +25,6 @@ class ChatPDF:
             chunk_size=1024, chunk_overlap=100
         )
         self.prompt = hub.pull("rlm/rag-prompt")
-
         self.vector_store = None
         self.retriever = None
         self.chain = None
@@ -35,14 +33,14 @@ class ChatPDF:
         docs = PyPDFLoader(file_path=pdf_file_path).load()
         chunks = self.text_splitter.split_documents(docs)
         chunks = filter_complex_metadata(chunks)
-
-        self.vector_store = Chroma.from_documents(
+        
+        # Use FAISS instead of Chroma for vector storage.
+        self.vector_store = FAISS.from_documents(
             documents=chunks,
-            embedding=FastEmbedEmbeddings(),
-            persist_directory="chroma_db",
+            embedding=FastEmbedEmbeddings()
         )
 
-     # --- Define Reasoning Actions ---
+    # --- Define Reasoning Actions ---
     def system_analysis(query):
         prompt = PromptTemplate.from_template(
             "Given the query: '{query}', rephrase it or decompose it for better clarity. If no changes are needed, return the original query."
@@ -51,7 +49,7 @@ class ChatPDF:
         return chain.run(query=query)
     
     def retrieval_answer(query):
-        # Retrieve context from Chroma
+        # Retrieve context from FAISS-backed retriever.
         retrieved_docs = retriever.get_relevant_documents(query)
         context = "\n".join([doc.page_content for doc in retrieved_docs])
         prompt = PromptTemplate.from_template(
@@ -91,23 +89,23 @@ class ChatPDF:
             reasoning_history = []
             
             # Action 1: System Analysis
-            analysis = system_analysis(root)
+            analysis = ChatPDF.system_analysis(root)
             reasoning_history.append(("SAY", analysis))
             
             # Action 2: Retrieval Answer based on analysis
-            retrieval = retrieval_answer(analysis)
+            retrieval = ChatPDF.retrieval_answer(analysis)
             reasoning_history.append(("RA", retrieval))
             
             # Action 3: Query Transformation to refine the original query
-            refined_query = query_transformation(analysis)
+            refined_query = ChatPDF.query_transformation(analysis)
             reasoning_history.append(("QT", refined_query))
             
             # Action 4: Direct Answer on the refined query
-            direct = direct_answer(refined_query)
+            direct = ChatPDF.direct_answer(refined_query)
             reasoning_history.append(("DA", direct))
             
             # Action 5: Summary Answer combines the reasoning steps
-            final_answer = summary_answer(
+            final_answer = ChatPDF.summary_answer(
                 history="\n".join([f"{act}: {out}" for act, out in reasoning_history]),
                 context=retrieval
             )
@@ -115,16 +113,13 @@ class ChatPDF:
             
             candidate_paths.append((reasoning_history, final_answer))
         
-        # Here, a more advanced implementation would verify self-consistency.
-        # For now, we simply return the final answer from the first rollout.
+        # For simplicity, return the final answer from the first rollout.
         return candidate_paths[0][1]
     
-
     def ask(self, query: str):
         if not self.vector_store:
-            self.vector_store = Chroma(
-                persist_directory="chroma_db", embedding=FastEmbedEmbeddings()
-            )
+            # Initialize vector store with an empty document list if not ingested yet.
+            self.vector_store = FAISS.from_documents([], embedding=FastEmbedEmbeddings())
 
         self.retriever = self.vector_store.as_retriever(
             search_type="similarity_score_threshold",
@@ -143,7 +138,7 @@ class ChatPDF:
         if not self.chain:
             return "Please, add a PDF document first."
 
-        # TODO Use air rag ansatz
+        # TODO: Use an AirRAG-like approach.
         return self.chain.invoke(query)
 
     def clear(self):
