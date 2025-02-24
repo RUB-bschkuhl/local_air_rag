@@ -24,3 +24,4 @@ zipp==3.17.0
 pdfplumber
 sentence-transformers
 faiss-cpu
+streamlit_chat
